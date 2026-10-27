@@ -1,0 +1,66 @@
+
+name: Build Mira Vale APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'MiraVale_APK_Project.zip'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Find Android SDK
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}" >> "$GITHUB_ENV"
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER=$(find "$SDK/cmdline-tools" -type f -name sdkmanager 2>/dev/null | head -n 1)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found"
+            exit 1
+          fi
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --licenses || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Extract project ZIP
+        run: |
+          mkdir -p unpacked
+          unzip -q MiraVale_APK_Project.zip -d unpacked
+          SETTINGS=$(find unpacked -name settings.gradle.kts -type f | head -n 1)
+          if [ -z "$SETTINGS" ]; then
+            echo "settings.gradle.kts not found in ZIP"
+            exit 1
+          fi
+          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
+
+      - name: Install Gradle
+        run: |
+          curl -fL https://services.gradle.org/distributions/gradle-8.9-bin.zip -o gradle.zip
+          unzip -q gradle.zip
+
+      - name: Build APK
+        run: |
+          ./gradle-8.9/bin/gradle -p "$PROJECT_DIR" assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mira-Vale-APK
+          path: unpacked/**/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
