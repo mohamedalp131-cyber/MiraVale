@@ -1,0 +1,55 @@
+
+name: Build Mira Vale APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'MiraVale_APK_Project.zip'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get project
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android tools
+        uses: android-actions/setup-android@v3
+
+      - name: Extract project ZIP
+        run: |
+          mkdir -p unpacked
+          unzip -q MiraVale_APK_Project.zip -d unpacked
+          SETTINGS=$(find unpacked -name settings.gradle.kts -type f | head -n 1)
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: settings.gradle.kts was not found in the ZIP."
+            exit 1
+          fi
+          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
+
+      - name: Install Gradle
+        run: |
+          curl -L https://services.gradle.org/distributions/gradle-8.9-bin.zip -o gradle.zip
+          unzip -q gradle.zip
+
+      - name: Build APK
+        run: ./gradle-8.9/bin/gradle -p "$PROJECT_DIR" assembleDebug --no-daemon
+
+      - name: Save APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mira-Vale-APK
+          path: unpacked/**/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
